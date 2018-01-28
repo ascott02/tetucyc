@@ -179,18 +179,18 @@ class Experiment(object):
     #
     def test_fold(self, fold, labels, clargs=None, nandetector=False):
         cl = self.cl() if clargs is None else self.cl(**clargs)
-        a = [[self.data[i][:,1:32],self.data[i][:,0]] for i in self.data if i is not fold]
+        a = [[self.data[i][:,1:33],self.data[i][:,0]] for i in self.data if i is not fold]
         cl.fit(list(itertools.chain.from_iterable([i[0] for i in a])),\
                 list(itertools.chain.from_iterable([[int(z) for z in i[1]] for i in a])))
         #ENFUCKULATE
-        x = cl.score(self.data[fold][:,1:32], [int(z) for z in self.data[fold][:,0]])
+        x = cl.score(self.data[fold][:,1:33], [int(z) for z in self.data[fold][:,0]])
         for k in self.data[fold]:
 
-            a = cl.predict_proba(k[1:32].reshape(1, -1))
+            a = cl.predict_proba(k[1:33].reshape(1, -1))
             # a = cl.predict_proba(k[1:32])
             if True in np.isnan(a) and nandetector is True:
                 print(int(k[33]))
-        return [[int(z) for z in self.data[fold][:,0]], x,cl.predict_proba(self.data[fold][:,1:32])]
+        return [[int(z) for z in self.data[fold][:,0]], x,cl.predict_proba(self.data[fold][:,1:33])]
 
     # Prints the ROC and AUC graphs to self.expdir/self.title-ROC.png
     # Requires:
