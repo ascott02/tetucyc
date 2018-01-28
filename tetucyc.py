@@ -10,7 +10,8 @@ from math import sqrt
 from operator import itemgetter
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import SGDClassifier
-from sklearn.lda import LDA
+# from sklearn.lda import LDA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
@@ -74,7 +75,7 @@ class Experiment(object):
                     results[-1][-1]], results[-1][0])
         else:
             self.load_data(fp)
-            self.cl_title = self.fp[:-1] +  time.strftime("%d-%m-%Y-%H%M%S", time.localtime())
+            self.cl_title = self.fp[-5:-1] +  time.strftime("%d-%m-%Y-%H%M%S", time.localtime())
             for each in self.data:
                 #This is the worst python ever written
                 start = time.perf_counter()
@@ -159,7 +160,7 @@ class Experiment(object):
         self.title = st.replace('/','').replace('.txt','').replace('.','')
         self.labels = classes.keys()
         if mk_out:
-            self.expdir = fp.split('/')[-2] + '-results/' if fp.endswith('/') else fp.split('/')[-1]
+            self.expdir = fp.split('/')[-3] + '-results/' if fp.endswith('/') else fp.split('/')[-1]
             try:
                 os.mkdir(self.expdir)
             except:
@@ -171,14 +172,19 @@ class Experiment(object):
     #   labels - list of all the possible labels for a given test, may be superfluous now that partial fit
     #
     def test_fold(self, fold, labels, clargs=None, nandetector=False):
+
         cl = self.cl() if clargs is None else self.cl(**clargs)
+
         a = [[self.data[i][:,1:32],self.data[i][:,0]] for i in self.data if i is not fold]
+
         cl.fit(list(itertools.chain.from_iterable([i[0] for i in a])),\
                 list(itertools.chain.from_iterable([[int(z) for z in i[1]] for i in a])))
+
         #ENFUCKULATE
         x = cl.score(self.data[fold][:,1:32], [int(z) for z in self.data[fold][:,0]])
+
         for k in self.data[fold]:
-            a = cl.predict_proba(k[1:32])
+            a = cl.predict_proba(k[1:32].reshape(-1, 1))
             if True in np.isnan(a) and nandetector is True:
                 print(int(k[33]))
         return [[int(z) for z in self.data[fold][:,0]], x,cl.predict_proba(self.data[fold][:,1:32])]
@@ -290,7 +296,7 @@ class Experiment(object):
             print('Tune time: ' + t)
         t = str(time.perf_counter()-start)
         if store:
-            cl_title = self.fp[:-1] + time.strftime("%d-%m-%Y-%H%M%S", time.localtime())
+            cl_title = self.fp[-5:-1] + time.strftime("%d-%m-%Y-%H%M%S", time.localtime())
             with open('params_'+ cl_title +'.txt', 'w') as f:
                 f.write('Tune time : ' + t + '\n' + '##############################' + '\n')
                 for a in param_hist.keys():
@@ -317,7 +323,7 @@ class Experiment(object):
                 returnable[each] = self.test_fold(each, self.labels, clargs=parameters)
 
         self.time = time.perf_counter() - start
-        self.cl_title = self.fp[:-1] +  time.strftime("%d-%m-%Y-%H%M%S", time.localtime())
+        self.cl_title = self.fp[-5:-1] +  time.strftime("%d-%m-%Y-%H%M%S", time.localtime())
         self.expdir = self.cl_title + '-results/' 
         try:
             os.mkdir(self.expdir)
@@ -481,7 +487,7 @@ if __name__ == '__main__':
                              'probability' : [True], 
                              'decision_function_shape' : ['ovr']}}
     classifiers = { 
-            'LDA' : LDA,
+            'LDA' : LinearDiscriminantAnalysis,
             'RF' : RandomForestClassifier,
             'SVC' : SVC,
             'EN' : SGDClassifier,
