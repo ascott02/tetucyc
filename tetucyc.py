@@ -18,11 +18,13 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import roc_curve
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import auc 
+from sklearn.metrics import roc_auc_score
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import f1_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_recall_fscore_support
+from sklearn.neural_network import MLPClassifier
 import os
 # This is an experiment object, that handles experimentation on RAP-BIDAL
 # data, for the sake of the RAP project, this is the more generalized version
@@ -44,15 +46,18 @@ class Experiment(object):
     #
     def __init__(self, fp, classifier = RandomForestClassifier, tune = False, \
             batch = False, search_area = None, tune_loc= None, labels=None):
+
         self.fp = fp
-        print(fp)
         self.matrices = {}
         self.cl = classifier
-        print(self.cl)
+
         results = []
         self.tmp_labels = labels
         self.act_labels = None
 
+        print("DEBUG: self.fp: ", self.fp)
+        print("DEBUG: self.cl: ", self.cl)
+        
         #Run the appropriate tuning
         if tune and tune_loc and search_area: 
             if batch:
@@ -62,11 +67,12 @@ class Experiment(object):
                 self.params = self.exhaustive_param_tune(search_area)
         else:
             self.params = None
+
         if batch:
             if self.params is None:
-                results_raw = self.batch_test(parameters=None, location=fp)
+                results_raw = self.batch_test(parameters=None, location=self.fp)
             else:
-                results_raw = self.batch_test(self.params[-1][-1], fp)
+                results_raw = self.batch_test(self.params[-1][-1], self.fp)
             for a in results_raw:
                 results.append(results_raw[a])
                 #print([np.argmax(j)for j in sorted(results[-1][-1], key=int)],
@@ -74,7 +80,7 @@ class Experiment(object):
                 self.matrices[a] = confusion_matrix([np.argmax(j)for j in \
                     results[-1][-1]], results[-1][0])
         else:
-            self.load_data(fp)
+            self.load_data(self.fp)
             self.cl_title = self.fp[-5:-1] +  time.strftime("%d-%m-%Y-%H%M%S", time.localtime())
             for each in self.data:
                 #This is the worst python ever written
@@ -104,7 +110,7 @@ class Experiment(object):
                 #print(z + str(y))
         roc_rates = []
         for k in range(roc_preds.shape[1]):
-            fpr, tpr, thresh = roc_curve(roc_preds[:,k],roc_probs[:,k])
+            fpr, tpr, thresh = roc_curve(roc_preds[:,k], roc_probs[:,k])
             roc_rates.append((fpr,tpr,thresh))
         roc_auc = [auc(i[0], i[1]) for i in roc_rates]
         self.roc_avg = sum(roc_auc) /len(roc_auc)
@@ -164,7 +170,7 @@ class Experiment(object):
             try:
                 os.mkdir(self.expdir)
             except:
-                print('Failed to make output directory, assuming it exists already')
+                print('A: Failed to make output directory, assuming it exists already')
 
     # Performs a test on a given fold with a given set of labels
     # Requires:
@@ -172,19 +178,16 @@ class Experiment(object):
     #   labels - list of all the possible labels for a given test, may be superfluous now that partial fit
     #
     def test_fold(self, fold, labels, clargs=None, nandetector=False):
-
         cl = self.cl() if clargs is None else self.cl(**clargs)
-
         a = [[self.data[i][:,1:32],self.data[i][:,0]] for i in self.data if i is not fold]
-
         cl.fit(list(itertools.chain.from_iterable([i[0] for i in a])),\
                 list(itertools.chain.from_iterable([[int(z) for z in i[1]] for i in a])))
-
         #ENFUCKULATE
         x = cl.score(self.data[fold][:,1:32], [int(z) for z in self.data[fold][:,0]])
-
         for k in self.data[fold]:
-            a = cl.predict_proba(k[1:32].reshape(-1, 1))
+
+            a = cl.predict_proba(k[1:32].reshape(1, -1))
+            # a = cl.predict_proba(k[1:32])
             if True in np.isnan(a) and nandetector is True:
                 print(int(k[33]))
         return [[int(z) for z in self.data[fold][:,0]], x,cl.predict_proba(self.data[fold][:,1:32])]
@@ -293,8 +296,8 @@ class Experiment(object):
             if location not in param_hist:
                 param_hist[location] = []
             param_hist[location].append([t_a, param_dict])
-            print('Tune time: ' + t)
         t = str(time.perf_counter()-start)
+        print('Tune time: ' + t)
         if store:
             cl_title = self.fp[-5:-1] + time.strftime("%d-%m-%Y-%H%M%S", time.localtime())
             with open('params_'+ cl_title +'.txt', 'w') as f:
@@ -314,8 +317,9 @@ class Experiment(object):
         returnable = {}
         data_sets = {}
         for k in os.listdir(location):
-                    self.load_data(location + '/'+k, mk_out=False)
-                    data_sets[k] = self.data
+            
+            self.load_data(location + '/' + k, mk_out=False)
+            data_sets[k] = self.data
         start = time.perf_counter()
         for k in data_sets:
             self.data = data_sets[k]
@@ -324,11 +328,12 @@ class Experiment(object):
 
         self.time = time.perf_counter() - start
         self.cl_title = self.fp[-5:-1] +  time.strftime("%d-%m-%Y-%H%M%S", time.localtime())
-        self.expdir = self.cl_title + '-results/' 
+        self.expdir = self.fp.split('/')[-3] + '-results/' if self.fp.endswith('/') else self.fp.split('/')[-1]
+        # self.expdir = self.cl_title + '-results/' 
         try:
             os.mkdir(self.expdir)
         except:
-            print('Failed to make output directory, assuming it exists already')
+            print('B: Failed to make output directory, assuming it exists already')
 
         return returnable
                 
@@ -460,8 +465,10 @@ if __name__ == '__main__':
 
     args  = { 
             None : None,
-            'rf-params' : {'n_estimators': [i for i in range(1000)], 'criterion':['gini', 'entropy']},
+            'rf-params' : {'n_estimators': [i for i in range(5, 20, 5)], 'criterion':['gini', 'entropy']},
             'en-params' : {'loss' : ['log'], 'penalty' : ['elasticnet'], 'l1_ratio': [i/100 for i in range(100)]},
+            # 'knn-params' : {'n_neighbors' : [x for x in range(5, 1200, 5)] },
+            'knn-params' : {'n_neighbors' : [x for x in range(5, 10, 5)] },
             # Cutting down on search space for these svc. By design, the Experiment object will produce
             # every possible combination of the arguments provided on instantiation. Additionally, the
             # SVC classifier will not be affected by changing the certain arguments while other arguments
@@ -491,6 +498,18 @@ if __name__ == '__main__':
             'RF' : RandomForestClassifier,
             'SVC' : SVC,
             'EN' : SGDClassifier,
+            'MLP' : MLPClassifier,
+            'KNN' : KNeighborsClassifier,
             'GNB' : GaussianNB}
-    a = Experiment(a.f, classifier=classifiers[a.c], batch=a.B, search_area=args[a.p], tune_loc=a.t, labels=[1,5,46])
+
+
+    one_gesture = [34]
+    four_gesture = [34, 35, 41, 42]
+    nine_gesture = [34, 35, 36, 41, 42, 43, 44, 45, 46]
+    thirteen_gesture = [34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]
+    twentyfive_gesture = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 25, 32, 33, 34, 35, 36, 37, 38, 39, 40, 43, 44, 45, 46]
+    fortyseven_gesture = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46]
+
+    # a = Experiment(a.f, classifier=classifiers[a.c], batch=a.B, search_area=args[a.p], tune_loc=a.t, labels=[1,5,46])
+    a = Experiment(a.f, classifier=classifiers[a.c], batch=a.B, search_area=args[a.p], tune_loc=a.t, labels=four_gesture, tune=True)
 
