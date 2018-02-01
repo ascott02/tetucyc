@@ -46,11 +46,11 @@ class Experiment(object):
     #
     def __init__(self, fp, classifier = RandomForestClassifier, tune = False, \
             batch = False, search_area = None, tune_loc= None, labels=None):
-
         self.fp = fp
+        print(fp)
         self.matrices = {}
         self.cl = classifier
-
+        print(self.cl)
         results = []
         self.tmp_labels = labels
         self.act_labels = None
@@ -67,7 +67,6 @@ class Experiment(object):
                 self.params = self.exhaustive_param_tune(search_area)
         else:
             self.params = None
-
         if batch:
             if self.params is None:
                 results_raw = self.batch_test(parameters=None, location=self.fp)
@@ -92,6 +91,7 @@ class Experiment(object):
                 self.time = time.perf_counter() - start
                 self.matrices[each] = confusion_matrix([np.argmax(j)\
                         for j in results[-1][-1]], results[-1][0])
+
         roc_preds , roc_probs =  [], []
         for each in results:
             metrics_accumulated = []
@@ -100,19 +100,24 @@ class Experiment(object):
                         for j in sorted([int(k) for k in \
                         self.labels], key=int)])
                 roc_probs.append(each[-1][i])
+
         roc_preds = np.array(roc_preds)
         roc_probs = np.array(roc_probs)
+
         # Ugly bullshit
         for k, y in zip(roc_probs, roc_preds):
             z = ' '.join([str(i) for i in k])
             if 'nan' in z:
                 pass
                 #print(z + str(y))
+
         roc_rates = []
         for k in range(roc_preds.shape[1]):
             fpr, tpr, thresh = roc_curve(roc_preds[:,k], roc_probs[:,k])
             roc_rates.append((fpr,tpr,thresh))
+
         roc_auc = [auc(i[0], i[1]) for i in roc_rates]
+
         self.roc_avg = sum(roc_auc) /len(roc_auc)
         self.graph_it(roc_rates, roc_auc)
         self.print_results()
@@ -185,7 +190,6 @@ class Experiment(object):
         #ENFUCKULATE
         x = cl.score(self.data[fold][:,1:33], [int(z) for z in self.data[fold][:,0]])
         for k in self.data[fold]:
-
             a = cl.predict_proba(k[1:33].reshape(1, -1))
             # a = cl.predict_proba(k[1:32])
             if True in np.isnan(a) and nandetector is True:
@@ -317,7 +321,6 @@ class Experiment(object):
         returnable = {}
         data_sets = {}
         for k in os.listdir(location):
-            
             self.load_data(location + '/' + k, mk_out=False)
             data_sets[k] = self.data
         start = time.perf_counter()
@@ -465,7 +468,7 @@ if __name__ == '__main__':
 
     args  = { 
             None : None,
-            'rf-params' : {'n_estimators': [i for i in range(5, 20, 5)], 'criterion':['gini', 'entropy']},
+            'rf-params' : {'n_estimators': [i for i in range(5, 15, 5)], 'criterion':['gini', 'entropy']},
             'en-params' : {'loss' : ['log'], 'penalty' : ['elasticnet'], 'l1_ratio': [i/100 for i in range(100)]},
             # 'knn-params' : {'n_neighbors' : [x for x in range(5, 1200, 5)] },
             'knn-params' : {'n_neighbors' : [x for x in range(5, 10, 5)] },
